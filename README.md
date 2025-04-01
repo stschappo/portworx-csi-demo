@@ -2,7 +2,7 @@
 
 ## General overview
 
-This demo setup is using [px-deploy](#https://github.com/PureStorage-OpenConnect/px-deploy) to deploy a Kubernetes cluster on VMware vSphere. The Kubernetes cluster has one master node and three worker nodes. Within the deployment there are pretty cool custom aliases set for the Kubernetes context. 
+This demo setup is using [px-deploy](https://github.com/PureStorage-OpenConnect/px-deploy) to deploy a Kubernetes cluster on VMware vSphere. The Kubernetes cluster has one master node and three worker nodes. Within the deployment there are pretty cool custom aliases set for the Kubernetes context. 
 The underlying storage will be a Pure Storage FlashArray, connected via iSCSI. 
 
 
@@ -42,7 +42,7 @@ nano /etc/multipath.conf
 ```
 
 Paste the following lines into it:
-```json
+```bash
 defaults {
     user_friendly_names no
     enable_foreign "^$"
@@ -97,6 +97,7 @@ blacklist {
 ```
 
 Restart services to apply the new config file:
+
 ```bash
 systemctl restart multipathd.service
 ```
@@ -104,6 +105,7 @@ systemctl restart multipathd.service
 
 
 Use the following oneliner to automate:
+
 ```bash
 for node in node-1-1 node-1-2 node-1-3; do
     ssh "$node" "cat <<EOF | sudo tee /etc/multipath.conf
@@ -162,17 +164,21 @@ EOF
 sudo systemctl restart multipathd"
 done
 ```
+
 ## Connect to FlashArray
 
-At this point you need to create an API key/token to make the iSCSI connections work. You can do this the manual way via GUI/CLI or use my automated script [FlashArray-Create-API-Key](#https://github.com/stschappo/FlashArray-Create-API-Key)
+At this point you need to create an API key/token to make the iSCSI connections work. You can do this the manual way via GUI/CLI or use my automated script [FlashArray-Create-API-Key](https://github.com/stschappo/FlashArray-Create-API-Key)
+
 ### Create pure.json (from master node)
 
 Create the pure.json file on the master node:
+
 ```bash
 nano pure.json
 ```
 
 Paste the following into it (update it with your specific values).
+
 ```json
 {
   "FlashArrays": [
@@ -187,23 +193,29 @@ Paste the following into it (update it with your specific values).
 ## Create K8 namespace & secret
 
 ### Create namespace
+
 ```bash
 kubectl create ns portworx
 ```
 
 ### Create secret with the API token
+
 ```bash
 kubectl create secret generic px-pure-secret --namespace portworx --from-file=pure.json=/root/pure.json
 ```
 
 ### Remove pure.json
+
 As the json file is not needed anymore you can delete it:
+
 ```bash
 rm /root/pure.json
 ```
 
 
 ## Portworx Central Create CSI Spec
+
+Login or Register to [Portworx Central](https://central.portworx.com/) and create a new PX-CSI spec. 
 
 Enter your correct K8 version, namespace, SAN, etc.
 
@@ -220,6 +232,7 @@ In this case, we used the following settings:
 | Starting Port for Portworx Services | 9001       |
 | Telemetry                           | Disabled   |
 
+
 ### Install the Portworx Operator
 
 ```bash
@@ -229,6 +242,7 @@ kubectl apply -f 'https://install.portworx.com/25.2.0?comp=pxoperator&oem=px-csi
 ### Download  StorageCluster YAML
 
 Replace with your own URL:
+
 ```bash
 curl -o stc.yaml 'https://install.portworx.com/25.2.0?oem=px-csi&operator=true&ce=pure&csi=true&stork=false&mon=true&promop=true&kbver=1.31.6&ns=portworx&c=px-cluster-a141f05e-18f0-4ade-bb93-adacdbc44461&r=9001&pureSanType=ISCSI&tel=false'
 ```
@@ -236,11 +250,13 @@ curl -o stc.yaml 'https://install.portworx.com/25.2.0?oem=px-csi&operator=true&c
 ### Skip health-check in StorageCluster spec until a fix is out in px-deploy
 
 Oneliner to set the desired annotations:
+
 ```bash
 sed -i 's/portworx.io\/misc-args: "--oem px-csi"/portworx.io\/misc-args: "--oem px-csi"\n    portworx.io\/health-check: skip/' stc.yaml
 ```
 
 Apply the new config:
+
 ```bash
 kubectl apply -f stc.yaml
 ```
@@ -248,31 +264,37 @@ kubectl apply -f stc.yaml
 ## Miscellaneous
 
 Check Storage Cluster:
+
 ```bash
 kubectl get storagecluster -n portworx
 ```
 
 Check Storage Cluster (verbose):
+
 ```bash
 kubectl describe storagecluster -n portworx
 ```
 
 Get iqn from the worker nodes:
+
 ```bash
 cat /etc/iscsi/initiatorname.iscsi | grep iqn
 ```
 
 Get iqn from all worker nodes parallel:
+
 ```bash
 for node in node-1-{1..3}; do ssh "$node" "cat /etc/iscsi/initiatorname.iscsi | grep iqn"; done
 ```
 
 Install the required multipathing binaries on a worker node locally (reboot required):
+
 ```bash
 dnf install -y sg3_utils device-mapper-multipath iscsi-initiator-utils
 ```
 
 Install the required multipathing binaries on all worker nodes and reboot them:
+
 ```bash
 for node in node-1-1 node-1-2 node-1-3; do ssh "$node" "dnf install -y sg3_utils device-mapper-multipath iscsi-initiator-utils && reboot" & done
 ```
